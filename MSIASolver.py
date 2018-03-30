@@ -188,7 +188,7 @@ class MSIAClassifier(ABC):
             plt.legend()
             plt.show()
 
-    def gradient_descent(self, initial_model, X, Y, max_iterations, alpha, starting_thetas=None, max_time=0, tic_time=0):
+    def gradient_descent(self, initial_model, X, Y, max_iterations, alpha, starting_thetas=None, max_time=0, tic_time=None):
         """performs gradient descent
         """
         self.n_samples = len(X)
@@ -198,8 +198,7 @@ class MSIAClassifier(ABC):
         self.progression = []
         cnt = max_iterations
         cout = 1
-        ctime = 0
-        while cnt > 0 and (max_time==False or (tic_time-)):# and (len(self.progression)<=100 or (len(self.progression)>100 and np.abs(self.cout_moyen)>0.00000001)):#np.abs(cout) > 0.00000001 and 
+        while cnt > 0 and (max_time==0 or (datetime.now()-tic_time).seconds<max_time):# and (len(self.progression)<=100 or (len(self.progression)>100 and np.abs(self.cout_moyen)>0.00000001)):#np.abs(cout) > 0.00000001 and 
             iteration = self.get_cost_derivative(initial_model, self.predicted_thetas, X, Y)
             iteration*= alpha
             self.predicted_thetas = self.predicted_thetas - iteration
@@ -223,11 +222,11 @@ class LinearRegression(MSIAClassifier):
         self.n_samples = n_samples
         MSIAClassifier.__init__(self, self.learning_rate, self.max_iterations, self.starting_thetas, self.range_x, self.n_samples)
 
-    def fit(self, X, Y, max_time=False):
+    def fit(self, X, Y, max_time=False, tic_time=0):
         """Linear Regression Fit
         """
         X = self.scale(X)
-        self.predicted_thetas = self.gradient_descent(self.linear_regression, X, Y, self.max_iterations, self.learning_rate, max_time=max_time)
+        self.predicted_thetas = self.gradient_descent(self.linear_regression, X, Y, self.max_iterations, self.learning_rate, max_time=max_time, tic_time=tic_time)
         self.rescale()
         return self
 
@@ -277,11 +276,11 @@ class LogisticRegression(MSIAClassifier):
         self.n_samples = n_samples
         MSIAClassifier.__init__(self, self.learning_rate, self.max_iterations, self.predicted_thetas, self.range_x, self.n_samples)
 
-    def fit(self,X,Y, max_time=False):
+    def fit(self,X,Y, max_time=False, tic_time=0):
         """Logistic Regression Fit
         """
         X = self.scale(X,'std')
-        self.predicted_thetas = self.gradient_descent(self.sigmoid, X, Y, self.max_iterations, self.learning_rate, max_time=max_time)
+        self.predicted_thetas = self.gradient_descent(self.sigmoid, X, Y, self.max_iterations, self.learning_rate, max_time=max_time, tic_time=tic_time)
         self.predicted_thetas/= np.absolute(self.predicted_thetas[:,0]).max()
         return self
 
@@ -531,8 +530,8 @@ class MSIASolver():
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 13
-n_samples = 66
+n_dimensions = 400
+n_samples = 888
 range_x = 10000000
 max_iterations = 4000 
 randomize = 0.0 
