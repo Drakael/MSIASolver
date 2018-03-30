@@ -388,6 +388,7 @@ class MSIASolver():
         self.__randomize = randomize
         self.__max_time = max_time
         self.__tic_time = tic_time
+        self.__true_weights = None
         self.__clf = None
         self.__X = None
         self.__Y = None
@@ -488,10 +489,10 @@ class MSIASolver():
                     
     def severe_randomizer(self, class_type='LinearRegression', n_samples=50, n_dimensions=10, range_x = 10000):
         #calcul aléatoire de poids pour le modèle théorique
-        true_weights = (np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
+        self.__true_weights = (np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
         self.__x_span = range_x / 2
         if class_type == 'LogisticRegression':
-            self.__clf = 'LogisticRegression'
+            self.__use_classifier = 'LogisticRegression'
             self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
             print('----use of LogisticRegression----')
         else:
@@ -519,7 +520,9 @@ class MSIASolver():
                 row.append(value)
             X.append(row)
         X = np.array(X)
-        Y = self.__clf.randomize_model(true_weights, X, range_x, self.__randomize, rand_offsets) 
+        Y = self.__clf.randomize_model(self.__true_weights, X, range_x, self.__randomize, rand_offsets) 
+        if self.__use_classifier == 'LogisticRegression':
+            self.__true_weights/= np.absolute(self.__true_weights[:,0]).max()
         return X, Y, true_weights
 
 
@@ -530,11 +533,11 @@ class MSIASolver():
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 400
-n_samples = 888
+n_dimensions = 222
+n_samples = 444
 range_x = 10000000
 max_iterations = 4000 
-randomize = 0.0 
+randomize = 0.066 
 
 #déclaration du solveur
 solver = MSIASolver(max_iterations, randomize, 50, tic_time)
