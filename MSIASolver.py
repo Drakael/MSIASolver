@@ -523,7 +523,7 @@ class MSIASolver():
         Y = self.__clf.randomize_model(self.__true_weights, X, range_x, self.__randomize, rand_offsets) 
         if self.__use_classifier == 'LogisticRegression':
             self.__true_weights/= np.absolute(self.__true_weights[:,0]).max()
-        return X, Y, true_weights
+        return X, Y, self.__true_weights
 
 
 
@@ -533,11 +533,11 @@ class MSIASolver():
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 222
-n_samples = 444
+n_dimensions = 22
+n_samples = 66
 range_x = 10000000
 max_iterations = 4000 
-randomize = 0.066 
+randomize = 0.2 
 
 #déclaration du solveur
 solver = MSIASolver(max_iterations, randomize, 50, tic_time)
