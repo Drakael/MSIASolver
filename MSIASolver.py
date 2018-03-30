@@ -73,10 +73,8 @@ class MSIAClassifier(ABC):
         self.mean = X.mean(axis=0)
         self.std = X.std(axis=0)
         self.ptp = X.ptp(axis=0)
-        #verif
-        #print('mean_',self.mean,' / ',np.mean(X,axis=0))
-        #print('std_',self.std,' / ',np.std(X,axis=0))
-        #print('ptp_',self.ptp,' / ',np.ptp(X,axis=0))
+        self.minima = X.min(axis=0)
+        self.maxima = X.max(axis=0)
         return self
     
     def get_mean(self):
@@ -92,13 +90,10 @@ class MSIAClassifier(ABC):
     def scale_(self, X):
         """Scale X values with min and max
         """
-        self.minima = []
-        self.maxima = []
+        self.init_attribs_from_X(X)
         for i in range(X.shape[1]):
             min_ = np.min(X[:,i])
-            self.minima.append(min_)
             max_ = np.max(X[:,i])
-            self.maxima.append(max_)
             X[:,i]-=min_
             X[:,i]/=max_-min_
         return X
@@ -107,26 +102,19 @@ class MSIAClassifier(ABC):
     def scale(self, X, on='ptp'):
         """Scale X values with means and ranges
         """
-        self.mean = X.mean(axis=0)
-        self.std = X.std(axis=0)
-        self.ptp = X.ptp(axis=0)
+        self.init_attribs_from_X(X)
         self.scale_mode = on
         if self.scale_mode == 'ptp':
-            ar_std = (X - self.mean) / self.ptp
+            X = (X - self.mean) / self.ptp
         else:
-            ar_std = (X - self.mean) / self.std
-        #verif
-        #print('mean_',self.mean,' / ',np.mean(ar_std,axis=0))
-        #print('std_',self.std,' / ',np.std(ar_std,axis=0))
-        #print('ptp_',self.ptp,' / ',np.ptp(ar_std,axis=0))
-        return ar_std
+            X = (X - self.mean) / self.std
+        return X
     
     #fonction de remise à l'échelle des poids prédis selon la normalisation initiale
     def rescale(self):
         """Rescale weights to original scale
         """
         array = []
-        #p('self.predicted_thetas',self.predicted_thetas)
         theta_zero = self.predicted_thetas[0].copy()
         for col, mean, std, ptp in zip(self.predicted_thetas[1:], self.mean, self.std, self.ptp):
             if self.scale_mode == 'ptp':
@@ -135,11 +123,7 @@ class MSIAClassifier(ABC):
                 theta_i = float((col) / std)
             array.append(theta_i)
             theta_zero -= theta_i * mean
-        #p('theta_zero',theta_zero)
-        #p('array',array)
-        #p('self.predicted_thetas before',self.predicted_thetas)
         self.predicted_thetas = np.array([float(theta_zero),]+array).reshape(len(self.predicted_thetas),1)
-        #p('self.predicted_thetas after',self.predicted_thetas)
         return self
 
     def linear_regression(self, theta, x):
@@ -321,7 +305,7 @@ class LogisticRegression(MSIAClassifier):
         """Logistic Regression Cost calculation (regular)
         """
         #cout = float(np.sum(np.absolute(model(theta,X)-Y))/ self.n_samples) 
-        cout = float(np.absolute(model(theta,X)-Y).mean())
+        cout = float(np.absolute((model(theta,X)-Y)**2).mean())
         return cout
 
     def randomize_model(self, theta, X, range_x, random_ratio=0.0, offsets=None):
@@ -486,16 +470,20 @@ class MSIASolver():
     
     def get_x_span(self):
         return self.__x_span
+    
+    def get_classifier(self):
+        return self.__use_classifier
                     
     def severe_randomizer(self, class_type='LinearRegression', n_samples=50, n_dimensions=10, range_x = 10000):
         #calcul aléatoire de poids pour le modèle théorique
         self.__true_weights = (np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
-        self.__x_span = range_x / 2
+        self.__x_span = range_x
         if class_type == 'LogisticRegression':
             self.__use_classifier = 'LogisticRegression'
             self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
             print('----use of LogisticRegression----')
         else:
+            self.__use_classifier = 'LinearRegression'
             self.__clf = LinearRegression(max_iterations=self.__max_iterations)
         X = []
         self.n_samples = n_samples
@@ -505,17 +493,17 @@ class MSIASolver():
         rand_categories = []
         rand_offsets = []
         for i in range(n_dimensions):
-            rand_category = np.random.randint(-3,degre)
+            rand_category = np.random.randint(-1,degre)
             rand_categories.append(rand_category)
             #rand_offset = np.random.randint(0,degre)-((degre-1)/2)
-            rand_offset = (np.random.random()-0.5)*10**(rand_category-1)
+            rand_offset = (np.random.random()-0.5)*10**(rand_category+2)
             rand_offsets.append(rand_offset)
             
         for i in range(n_samples):
             row = []
             for j in range(n_dimensions):
                 value = (np.random.random()-0.5)*range_x
-                value*=10**(rand_categories[j]-1)
+                value*=10**(rand_categories[j])
                 value-= rand_offsets[j]
                 row.append(value)
             X.append(row)
@@ -533,14 +521,15 @@ class MSIASolver():
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 22
-n_samples = 66
+n_dimensions = 66
+n_samples = 666
 range_x = 10000000
 max_iterations = 4000 
 randomize = 0.2 
+max_execution_time = 111
 
 #déclaration du solveur
-solver = MSIASolver(max_iterations, randomize, 50, tic_time)
+solver = MSIASolver(max_iterations, randomize, max_execution_time, tic_time)
 
 #initialisation aléatoire du set d'entrainement
 X, Y, true_weights = solver.severe_randomizer('LogisticRegression', n_samples, n_dimensions, range_x)
@@ -593,7 +582,10 @@ print('StDs : ',"\n",solver.get_std())
 print('Ranges : ',"\n",solver.get_ptp())
 print('Erreurs : ',"\n",true_weights-predicted_thetas)
 print('Erreur globale : ',"\n",np.sum(true_weights-predicted_thetas))
-print('Erreur moyenne : ',"\n",np.sum(true_weights-predicted_thetas)/(len(X)*solver.get_x_span()))
+print('Erreur moyenne : ',"\n",np.sum(true_weights-predicted_thetas)/(len(X)))
+x_span = solver.get_x_span()
+print('Range of values :',x_span)
+print('Solver :',solver.get_classifier())
 #arrêt du chronomètre
 delta_time = (datetime.now()) - tic_time
 #affichage du temps de calcul global
