@@ -183,7 +183,9 @@ class MSIAClassifier(ABC):
         self.progression = []
         cnt = max_iterations
         cout = 1
-        while cnt > 0 and (max_time==0 or (datetime.now()-tic_time).seconds<max_time):# and (len(self.progression)<=100 or (len(self.progression)>100 and np.abs(self.cout_moyen)>0.00000001)):#np.abs(cout) > 0.00000001 and 
+        if tic_time is None:
+            tic_time = datetime.now()
+        while cnt > 0 and ((max_time==0) or (datetime.now()-tic_time).seconds<max_time):# and (len(self.progression)<=100 or (len(self.progression)>100 and np.abs(self.cout_moyen)>0.00000001)):#np.abs(cout) > 0.00000001 and 
             iteration = self.get_cost_derivative(initial_model, self.predicted_thetas, X, Y)
             iteration*= alpha
             self.predicted_thetas = self.predicted_thetas - iteration
@@ -274,7 +276,9 @@ class LogisticRegression(MSIAClassifier):
     def predict(self,X):
         """Logistic Regression Prediction
         """
-        return self.sigmoid(self.predicted_thetas, X)
+        array = self.sigmoid(self.predicted_thetas, X)
+        array = list(map(lambda x: 1 if x >= 0.5 else 0, array[:,0]))
+        return array
 
     def sigmoid(self, theta, x):
         """Logistic Regression Sigmoid function
@@ -395,7 +399,7 @@ class MSIASolver():
     def predict(self,X):
         """Solver Prediction
         """
-        return self.__clf.predict(self.X)
+        return self.__clf.predict(X)
     
     def __choose_classifier(self):
         """Solver: automatic classifier choice
@@ -404,17 +408,14 @@ class MSIASolver():
             if(self.__Y.shape[1]==1):
                 self.__use_classifier = 'LinearRegression'
                 min_ = self.__Y.min(axis=0)
-                p('self.__Y.dtype',self.__Y.dtype)
-                if (self.__Y.dtype == 'int32' or self.__Y.dtype == 'bool') and min_ >= 0:
+                if (self.__Y.dtype == 'int32' or self.__Y.dtype == 'int64' or self.__Y.dtype == 'bool') and min_ >= 0:
                     unique = np.unique(self.__Y.astype(float))
-                    p('unique',unique)
                     test = True
                     for item in unique:
                         if item.is_integer() == False:
                             test = False
                     if test == True:
                         self.__use_classifier = 'LogisticRegression'
-                        print('----use of LogisticRegression----')
             if self.__use_classifier == 'LogisticRegression':
                 self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
             else:
@@ -481,7 +482,6 @@ class MSIASolver():
         if class_type == 'LogisticRegression':
             self.__use_classifier = 'LogisticRegression'
             self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
-            print('----use of LogisticRegression----')
             for i in range(n_samples):
                 row = []
                 for j in range(n_dimensions):
@@ -525,10 +525,10 @@ plt.close('all')
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 1
-n_samples = 66
-range_x = 10
-max_iterations = 500 
+n_dimensions = 100
+n_samples = 666
+range_x = 1000
+max_iterations = 1500 
 randomize = 0.1 
 max_execution_time = 111
 true_weights = None
@@ -537,10 +537,10 @@ true_weights = None
 solver = MSIASolver(max_iterations, randomize, max_execution_time, tic_time)
 
 #initialisation aléatoire du set d'entrainement
-#X, Y, true_weights = solver.severe_randomizer('LinearRegression', n_samples, n_dimensions, range_x)
+X, Y, true_weights = solver.severe_randomizer('LinearRegression', n_samples, n_dimensions, range_x)
 
-X = np.random.normal(0, 2, 100)
-Y = np.random.normal(0, 2, 100)
+#X = np.random.normal(0, 2, 100)
+#Y = np.random.normal(0, 2, 100)
 
 #from sklearn.datasets import fetch_california_housing
 #dataset = fetch_california_housing()
