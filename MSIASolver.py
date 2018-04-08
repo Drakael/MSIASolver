@@ -39,7 +39,7 @@ class MSIAClassifier(ABC):
         self.cout_moyen = 1
     
     @abstractmethod
-    def fit(self, X, Y, max_time=False, tic_time=0):
+    def fit(self, X, Y, max_time=0, tic_time=0):
         """Fit model."""
         pass
         
@@ -70,10 +70,15 @@ class MSIAClassifier(ABC):
     def init_attribs_from_X(self, X):
         """Stores means, stds and ranges for X
         """
+        self.n_samples = X.shape[0]
         self.range_x = np.max(np.abs(X))
         self.mean = X.mean(axis=0)
         self.std = X.std(axis=0)
         self.ptp = X.ptp(axis=0)
+        if 0 in self.ptp:
+            print('zero ranged value!!!!')
+            idx = np.where(self.ptp == 0)
+            print('colonnes:',idx)
         self.minima = X.min(axis=0)
         self.maxima = X.max(axis=0)
         return self
@@ -106,9 +111,11 @@ class MSIAClassifier(ABC):
         self.init_attribs_from_X(X)
         self.scale_mode = on
         if self.scale_mode == 'ptp':
-            X = (X - self.mean) / self.ptp
+            for i, ptp in enumerate(self.ptp):
+                X[:,i] = (X[:,i] - self.mean[i]) / ptp if ptp != 0 else 0
         else:
-            X = (X - self.mean) / self.std
+            for i, std in enumerate(self.std):
+                X[:,i] = (X[:,i] - self.mean[i]) / std if std != 0 else 0
         return X
     
     #fonction de remise à l'échelle des poids prédis selon la normalisation initiale
@@ -209,11 +216,11 @@ class LinearRegression(MSIAClassifier):
         self.n_samples = n_samples
         MSIAClassifier.__init__(self, self.learning_rate, self.max_iterations, self.starting_thetas, self.range_x, self.n_samples)
 
-    def fit(self, X, Y, max_time=False, tic_time=0):
+    def fit(self, X, Y, max_time=0, tic_time=0):
         """Linear Regression Fit
         """
-        X = self.scale(X)
-        self.predicted_thetas = self.gradient_descent(self.linear_regression, X, Y, self.max_iterations, self.learning_rate, max_time=max_time, tic_time=tic_time)
+        X = self.scale(X, 'ptp')
+        self.predicted_thetas = self.gradient_descent(self.linear_regression, X, Y, self.max_iterations, self.learning_rate, starting_thetas=self.starting_thetas, max_time=max_time, tic_time=tic_time)
         self.rescale()
         return self
 
@@ -257,20 +264,21 @@ class LinearRegression(MSIAClassifier):
 class LogisticRegression(MSIAClassifier):
     """Logistic Regression Class
     """
-    def __init__(self, learning_rate=0.5, max_iterations=4000, predicted_thetas = None, range_x = 1, n_samples = 0):
+    def __init__(self, learning_rate=0.5, max_iterations=4000, starting_thetas = None, range_x = 1, n_samples = 0):
         self.learning_rate = learning_rate
         self.max_iterations = max_iterations
-        self.predicted_thetas = predicted_thetas
+        self.starting_thetas = starting_thetas
         self.range_x = range_x
         self.n_samples = n_samples
-        MSIAClassifier.__init__(self, self.learning_rate, self.max_iterations, self.predicted_thetas, self.range_x, self.n_samples)
+        MSIAClassifier.__init__(self, self.learning_rate, self.max_iterations, self.starting_thetas, self.range_x, self.n_samples)
 
-    def fit(self,X,Y, max_time=False, tic_time=0):
+    def fit(self,X,Y, max_time=0, tic_time=0):
         """Logistic Regression Fit
         """
         X = self.scale(X,'std')
-        self.predicted_thetas = self.gradient_descent(self.sigmoid, X, Y, self.max_iterations, self.learning_rate, max_time=max_time, tic_time=tic_time)
-        self.predicted_thetas/= np.absolute(self.predicted_thetas[:,0]).max()
+        self.predicted_thetas = self.gradient_descent(self.sigmoid, X, Y, self.max_iterations, self.learning_rate, starting_thetas=self.starting_thetas, max_time=max_time, tic_time=tic_time)
+        #self.predicted_thetas/= np.absolute(self.predicted_thetas[:,0]).max()
+        self.rescale()
         return self
 
     def predict(self,X):
@@ -313,6 +321,7 @@ class LogisticRegression(MSIAClassifier):
         """
         #cout = float(np.sum(np.absolute(model(theta,X)-Y))/ self.n_samples) 
         cout = float(np.absolute((model(theta,X)-Y)**2).mean())
+        #cout = float(np.mean((model(theta,X)-Y)**2))
         return cout
 
     def randomize_model(self, theta, X, range_x, random_ratio=0.0, offsets=None):
@@ -325,7 +334,7 @@ class LogisticRegression(MSIAClassifier):
         produit = []
         for x in X:
             sig = self.sigmoid(theta,x.reshape(1,len(x)))
-            val = 1 if sig > 0.5 else 0
+            val = 1 if sig < 0.5 else 0
             #option de random pour ajouter du bruit statistique
             if random_ratio != 0.0:
                 val = val if np.random.random() < random_ratio else 1 - val
@@ -338,7 +347,7 @@ class LogisticRegression(MSIAClassifier):
         if(len(self.predicted_thetas)==2):
             plt.figure()
             plt.plot(X, Y, 'o', label='original data')
-            x = np.linspace(-self.range_x/2,self.range_x/2,100)
+            x = np.linspace(np.min(X),np.max(X),100)
             y = []
             for var in x:
                 sig = self.sigmoid(self.predicted_thetas, var)
@@ -351,8 +360,9 @@ class LogisticRegression(MSIAClassifier):
 class MSIASolver():
     """Solver class
     """
-    def __init__(self, max_iterations=500, randomize=0.0, max_time=50, tic_time=None):
+    def __init__(self, max_iterations=500, learning_rate=0.3, randomize=0.0, max_time=50, tic_time=None):
         self.__max_iterations = max_iterations
+        self.__learning_rate = learning_rate
         self.__randomize = randomize
         self.__max_time = max_time
         self.__tic_time = tic_time
@@ -371,13 +381,16 @@ class MSIASolver():
                 array = array.reshape(array.shape[0],1)
             elif len(array.shape) == 0:
                 array = np.array(array).reshape(1,1)
+        elif type(array) == 'pandas.core.series.Series':
+            print('array.data',type(array.data),"\n",array.data)
         else:
-            print('different type!!!!',type(X))
+            print('different type!!!!',type(array),array.shape,"\n",array)
+            array = np.array(array).reshape(len(array),1)
         return array
         
         
         
-    def fit(self, X, Y, max_time=False):
+    def fit(self, X, Y, max_time=0):
         """Solver Fit
         """
         X = self.__format_array(X)
@@ -391,7 +404,9 @@ class MSIASolver():
         #todo: tests sur les données
         self.__choose_classifier()
         self.__clf.init_attribs_from_X(self.__X)
-        self.__clf.fit(self.__X, self.__Y, max_time or self.__max_time, self.__tic_time)
+        if (max_time == 0) and (self.__max_time != 0):
+            max_time = self.__max_time
+        self.__clf.fit(self.__X, self.__Y, max_time, self.__tic_time)
         self.__clf.plot_1_dimension(X, Y)
         
         return self
@@ -410,15 +425,18 @@ class MSIASolver():
                 min_ = self.__Y.min(axis=0)
                 if (self.__Y.dtype == 'int32' or self.__Y.dtype == 'int64' or self.__Y.dtype == 'bool') and min_ >= 0:
                     unique = np.unique(self.__Y.astype(float))
-                    test = True
-                    for item in unique:
-                        if item.is_integer() == False:
-                            test = False
-                    if test == True:
-                        self.__use_classifier = 'LogisticRegression'
+                    if len(unique) < 10:
+                        test = True
+                        for item in unique:
+                            if item.is_integer() == False:
+                                test = False
+                        if test == True:
+                            self.__use_classifier = 'LogisticRegression'
             if self.__use_classifier == 'LogisticRegression':
+                #print('---use of Logistic Regression---')
                 self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
             else:
+                #print('---use of Linear Regression---')
                 self.__clf = LinearRegression(max_iterations=self.__max_iterations)
                     
     def set_learning_rate(self, learning_rate):
@@ -474,7 +492,7 @@ class MSIASolver():
                     
     def severe_randomizer(self, class_type='LinearRegression', n_samples=50, n_dimensions=10, range_x = 10000):
         #calcul aléatoire de poids pour le modèle théorique
-        self.__true_weights = (np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
+        self.__true_weights = np.zeros((n_dimensions+1,1))#(np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
         self.__range_x = range_x
         X = []
         self.n_samples = n_samples
@@ -482,39 +500,44 @@ class MSIASolver():
         if class_type == 'LogisticRegression':
             self.__use_classifier = 'LogisticRegression'
             self.__clf = LogisticRegression(max_iterations=self.__max_iterations)
-            for i in range(n_samples):
-                row = []
-                for j in range(n_dimensions):
-                    value = (np.random.random()-0.5)*range_x
-                    row.append(value)
-                X.append(row)
         else:
             self.__use_classifier = 'LinearRegression'
             self.__clf = LinearRegression(max_iterations=self.__max_iterations)
-            degre = np.floor(np.log10(range_x))
-            if degre < 1:
-                degre = 1
-            rand_categories = []
-            for i in range(n_dimensions):
-                rand_category = np.random.randint(-1,degre)
-                rand_categories.append(rand_category)
-                #rand_offset = np.random.randint(0,degre)-((degre-1)/2)
-                rand_offset = (np.random.random()-0.5)*10**(rand_category+2)
-                rand_offsets.append(rand_offset)
-                
-            for i in range(n_samples):
-                row = []
-                for j in range(n_dimensions):
-                    value = (np.random.random()-0.5)*range_x
-                    value*=10**(rand_categories[j])
-                    value-= rand_offsets[j]
-                    row.append(value)
-                X.append(row)
+        degre = np.floor(np.log10(range_x))
+        if degre < 1:
+            degre = 1
+        rand_categories = []
+        rand_signs = []
+        for i in range(n_dimensions):
+            rand_category = np.random.randint(-1,degre+1)
+            rand_categories.append(rand_category)
+            rand_offset = (np.random.random()-0.5)*10**(rand_category+3)
+            rand_offsets.append(rand_offset)
+            sign = -1 if np.random.randint(0,2)==0 else 1
+            rand_signs.append(sign)
+            if class_type == 'LogisticRegression':
+                sign = -1 if np.random.randint(0,2)==0 else 1
+                self.__true_weights[i+1] = sign*10**(rand_categories[i])
+                self.__true_weights[0] += rand_offsets[i]*self.__true_weights[i+1]
+            
+        for i in range(n_samples):
+            row = []
+            for j in range(n_dimensions):
+                value = (np.random.random()-0.5)*range_x
+                value*=10**(rand_categories[j])
+                value-= rand_offsets[j]
+#                if class_type == 'LogisticRegression':
+#                    self.__true_weights[j+1] = 0.5 * 10**(rand_categories[j])
+#                    self.__true_weights[0] += 0.5 * rand_offsets[j]#*10**(rand_categories[j]) 
+                row.append(value)
+            X.append(row)
         
         X = np.array(X)
+        if class_type == 'LinearRegression':
+            self.__true_weights = (np.random.random((n_dimensions+1,1))*range_x)-(range_x/2)
         Y = self.__clf.randomize_model(self.__true_weights, X, range_x, self.__randomize, rand_offsets) 
-        if self.__use_classifier == 'LogisticRegression':
-            self.__true_weights/= np.absolute(self.__true_weights[:,0]).max()
+        #if self.__use_classifier == 'LogisticRegression':
+        #    self.__true_weights/= np.absolute(self.__true_weights[:,0]).max()
         return X, Y, self.__true_weights
 
 
@@ -525,19 +548,20 @@ plt.close('all')
 tic_time = datetime.now()
 
 #variables de base
-n_dimensions = 100
-n_samples = 666
+n_dimensions = 1
+n_samples = 66
 range_x = 1000
 max_iterations = 1500 
-randomize = 0.1 
+learning_rate = 0.3
+randomize = 10.0 
 max_execution_time = 111
 true_weights = None
 
 #déclaration du solveur
-solver = MSIASolver(max_iterations, randomize, max_execution_time, tic_time)
+solver = MSIASolver(max_iterations, learning_rate, randomize, max_execution_time, tic_time)
 
 #initialisation aléatoire du set d'entrainement
-X, Y, true_weights = solver.severe_randomizer('LinearRegression', n_samples, n_dimensions, range_x)
+X, Y, true_weights = solver.severe_randomizer('LogisticRegression', n_samples, n_dimensions, range_x)
 
 #X = np.random.normal(0, 2, 100)
 #Y = np.random.normal(0, 2, 100)
@@ -586,7 +610,6 @@ print('Theta start',"\n",solver.get_starting_thetas())
 if true_weights is not None:
     print("Theta target\n",true_weights) 
 print('Theta end : ',"\n",predicted_thetas)
-#if type(clf).__name__ == 'LinearRegression':
 print('Means : ',"\n",solver.get_mean())
 print('StDs : ',"\n",solver.get_std())
 print('Ranges : ',"\n",solver.get_ptp()) 
